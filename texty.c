@@ -1,4 +1,7 @@
 /*** includes ***/
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+#define _GNU_SOURCE
 
 #include <stdatomic.h>
 #include <stdio.h>
@@ -39,6 +42,7 @@ struct editor_config{
     int screen_row;
     int screen_col;
     int numrows;
+    char *filename;
     erow *row;
     struct termios orig_termios; // save the original attributes of the terminal
 };
@@ -152,19 +156,20 @@ int get_window_size(int *rows, int *cols) {
 }
 /** row operations**/
 void editor_append_row(char *s , size_t len){
-  E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
+  E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1 )); 
 
   int now_at = E.numrows;
-  
   E.row[now_at].size = len;
   E.row[now_at].chars  = malloc(len +1);
-
-  memcpy(E.row[now_at].chars, s, len);
+  //
+  memcpy(E.row[now_at].chars, s, len );
   E.row[now_at].chars[len] = '\0';
   E.numrows ++;
 }
 /** file I/O **/ 
 void editor_open(char *filename){
+  free(E.filename);
+  E.filename = strdup(filename);
   FILE *fp = fopen(filename, "r");
   if(!fp)die("can not open file");
 
@@ -249,12 +254,25 @@ void editor_draw_row(write_buf *ab) {
       }
       
         ab_append( ab, "\x1b[K", 3); // erase a line
-        if (y < E.screen_row - 1) { // don't put new line in the last row
-          ab_append( ab, "\r\n", 2);
-        }
+        ab_append( ab, "\r\n", 2);
 
     }
 }
+void editorDrawStatusBar(struct abuf *ab) {
+  ab_append(ab, "\x1b[7m", 4); // invert the color
+  char status[80];
+  int len = snprintf(status, sizeof(status), "%.20s - %d lines",
+  E.filename ? E.filename : "[No Name]", E.numrows);
+  if (len > E.screen_col) len = E.screen_col;
+  ab_append(ab, status, len);
+
+  while (len < E.screen_col) {
+    ab_append(ab, " ", 1);
+    len++;
+  }
+  ab_append(ab, "\x1b[m", 3); // invert back to normal
+}
+
 
 void refresh_the_screen(){
     editor_scroll();
@@ -262,10 +280,11 @@ void refresh_the_screen(){
     write_buf ab = ABUF_INIT; 
 
 
-    ab_append( &ab, "\x1b[H", 3); // go to the top
     // ab_append( &ab, "\x1b[?25l", 6); // hide the cursor
+    ab_append( &ab, "\x1b[H", 3); // go to the top
     //
     editor_draw_row(&ab);
+    editorDrawStatusBar(&ab);
 
     char buf[32];
     snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (E.cursorY - E.rowoff) + 1, (E.cursorX -E.coloff) + 1); // move the cursor to cy and cx
@@ -278,6 +297,7 @@ void refresh_the_screen(){
 
 /*** Input ***/
 void move_cursor(int key) {
+  erow *row = (E.cursorY>= E.numrows) ? NULL : &E.row[E.cursorY];
   switch (key) {
     case ARROW_LEFT:
       if (E.cursorX != 0) {
@@ -288,7 +308,12 @@ void move_cursor(int key) {
       }
       break;
     case ARROW_RIGHT:
-        E.cursorX++;
+      if(row && (row->size > E.cursorX)){
+        E.cursorX++;}
+      else if (row && E.cursorX == row->size) { // move right form last takes us down
+        E.cursorY++;
+        E.cursorX = 0;
+      }
       break;
     case ARROW_UP:
       if (E.cursorY != 0) {
@@ -300,6 +325,12 @@ void move_cursor(int key) {
         E.cursorY++;
       }
       break;
+
+    row = (E.cursorY >= E.numrows) ? NULL : &E.row[E.cursorY]; // setting it again ensures we are getting the current cursor Y pos
+    int rowlen = row ? row->size : 0;
+    if(E.cursorX > rowlen ){
+        E.cursorX = rowlen;
+    }
   }
 }
 void when_key_pressed () {
@@ -323,23 +354,24 @@ void when_key_pressed () {
             E.cursorX = 0;
         break;
         case END_KEY:
-            E.cursorX = E.screen_col - 1;
+          if(E.cursorY < E.numrows)
+            E.cursorX = E.row[E.cursorY].size;
         break;
         case PAGE_UP:
         case PAGE_DOWN:
           {
+            if (c == PAGE_UP) {
+                E.cursorY = E.rowoff;
+              } 
+            else if (c == PAGE_DOWN) {
+                  E.cursorY = E.rowoff + E.screen_row - 1;
+                  if (E.cursorY > E.numrows) E.cursorY = E.numrows;
+            }
             int times = E.screen_row;
             while (times--)
               move_cursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
           }
           break;
-
-        // default:
-        //     if (iscntrl(c)) {
-        //       printf("%d\r\n", c);
-        //     } else {
-        //       printf("%d ('%c')\r\n", c, c);
-        //     }
     }
 }
 
@@ -351,8 +383,10 @@ void editor_init(){
     E.row = NULL;
     E.rowoff = 0;
     E.coloff = 0;
+    E.filename = NULL;
     if(get_window_size(&E.screen_row,&E.screen_col) == -1)
         die("can not get window size");
+    E.screen_col --; //make room for status bar
 }
 int main(int argc, char * argv[]){
     enable_row_mode();
