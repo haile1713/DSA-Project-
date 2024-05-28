@@ -280,7 +280,7 @@ void refresh_the_screen(){
     write_buf ab = ABUF_INIT; 
 
 
-    // ab_append( &ab, "\x1b[?25l", 6); // hide the cursor
+    //ab_append( &ab, "\x1b[?25l", 6); // hide the cursor
     ab_append( &ab, "\x1b[H", 3); // go to the top
     //
     editor_draw_row(&ab);
@@ -355,7 +355,7 @@ void when_key_pressed () {
         break;
         case END_KEY:
           if(E.cursorY < E.numrows)
-            E.cursorX = E.row[E.cursorY].size;
+            E.cursorX = E.row[E.cursorY+1].size;
         break;
         case PAGE_UP:
         case PAGE_DOWN:
