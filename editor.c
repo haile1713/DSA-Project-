@@ -1,6 +1,6 @@
 #include "editor.h"
 #include <sys/ioctl.h> // to interact with the terminal
-#include <string.h>
+#include <stdbool.h>
 
 void die(const char *s) {
     write(STDOUT_FILENO, "\x1b[2J", 4); // clear
@@ -33,29 +33,60 @@ void enableRawMode() {
 
 }
 
+int getCursorPosition(int *rows, int *cols) {
+  char buf[32];
+  unsigned int i = 0;
+  if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1;
+  while (i < sizeof(buf) - 1) {
+    if (read(STDIN_FILENO, &buf[i], 1) != 1) break;
+    if (buf[i] == 'R') break;
+    i++;
+  }
+  buf[i] = '\0';
+  if (buf[0] != '\x1b' || buf[1] != '[') return -1;
+  if (sscanf(&buf[2], "%d;%d", rows, cols) != 2) return -1;
+  return 0;
+}
+
+
 
 int getWindowSize(int *rows, int *cols) {
     struct winsize ws;
 
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-        return -1;
+    if (1 || ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+        if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+          return getCursorPosition(rows, cols);
     } else {
         *cols = ws.ws_col;
         *rows = ws.ws_row;
         return 0;
     }
+    // if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+    //     return -1;}
+
 }
 
 void initEditor() {
     E.cx = 0;
     E.cy = 0;
+    E.rx = 0;
+    E.rowoff = 0;
+    E.coloff = 0;
+    E.numrows = 0;
+    E.row = NULL;
+    E.dirty = 0;
+    E.filename = NULL;
+    E.statusmsg[0] = '\0';
+    E.statusmsg_time = 0;
     if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
+    E.screenrows -= 2; // since we have added two lines below for the status bar
 }
 
+
 void abAppend(struct abuf *ab, const char *s, int len) {
-  char *new = realloc(ab->b, ab->len + len); // extend the size of the buffer
+  char *new = realloc(ab->b, ab->len + len);
   if (new == NULL) return;
-  memcpy(&new[ab->len], s, len); // copy the value of s in the new buffer
+  memcpy(&new[ab->len], s, len);
   ab->b = new;
   ab->len += len;
 }

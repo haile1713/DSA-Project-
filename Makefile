@@ -7,7 +7,7 @@ CFLAGS = -Wall -Wextra -pedantic -std=c99
 EXEC = texty
 
 # Source files
-SRC = main.c editor.c input.c output.c
+SRC = main.c editor.c input.c output.c fileio.c row.c find.c
 
 # Object files change .c to .o
 OBJ = $(SRC:.c=.o)
@@ -29,4 +29,3 @@ clean:
 
 # Phony targets
 .PHONY: all clean
-
