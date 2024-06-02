@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 CC = gcc
 
 # Compiler flags shows more errors
