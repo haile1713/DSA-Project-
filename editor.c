@@ -36,13 +36,13 @@ void enableRawMode() {
 int getCursorPosition(int *rows, int *cols) {
   char buf[32];
   unsigned int i = 0;
-  if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1;
-  while (i < sizeof(buf) - 1) {
-    if (read(STDIN_FILENO, &buf[i], 1) != 1) break;
-    if (buf[i] == 'R') break;
+  if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) return -1; // ask for the cursor position
+  while (i < sizeof(buf) - 1) { 
+    if (read(STDIN_FILENO, &buf[i], 1) != 1) break; // read the response
+    if (buf[i] == 'R') break; // check if the response is complete
     i++;
   }
-  buf[i] = '\0';
+  buf[i] = '\0'; 
   if (buf[0] != '\x1b' || buf[1] != '[') return -1;
   if (sscanf(&buf[2], "%d;%d", rows, cols) != 2) return -1;
   return 0;
@@ -61,9 +61,6 @@ int getWindowSize(int *rows, int *cols) {
         *rows = ws.ws_row;
         return 0;
     }
-    // if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-    //     return -1;}
-
 }
 
 void initEditor() {
